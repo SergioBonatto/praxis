@@ -4,8 +4,9 @@ CPPFLAGS += -I/opt/homebrew/opt/libedit/include
 LDFLAGS  += -L/opt/homebrew/opt/libedit/lib
 LDLIBS   = -ledit
 
-TARGET = prompt
-SRCS = src/prompt.c
+TARGET = parsing
+SRCS = src/parsing.c src/mpc.c
+
 
 all: $(TARGET)
 
@@ -17,4 +18,3 @@ run: $(TARGET)
 
 clean:
 	rm -f $(TARGET)
-
