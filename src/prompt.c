@@ -2,7 +2,6 @@
 #include <stdlib.h>
 
 #include <editline/readline.h>
-/* #include <editline/history.h> */
 
 int main(int argc, char** argv){
     // print version and exit information
@@ -18,11 +17,8 @@ int main(int argc, char** argv){
         // add input to history
         add_history(input);
 
-        // read a line of user input of maximum size 2048
-        fgets(input, 2048, stdin);
-
         // echo input back to user
-        printf("No you're a %s", input);
+        printf("No you're a %s\n", input);
 
         // free retrieved input
         free(input);
