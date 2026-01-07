@@ -1,4 +1,4 @@
-
+# Praxis (WIP)
 
 Praxis is a minimalist Lisp interpreter implemented in C. This project is a study in language implementation, focusing on parsing, evaluation, and runtime representation rather than completeness or performance. It follows the general structure proposed in [Build Your Own Lisp](https://www.buildyourownlisp.com/), with deliberate design choices and deviations made for clarity and experimentation.
 
