@@ -211,10 +211,10 @@ lval* builtin_head(lval* a){
     LASSERT(a, a->count == 1,
         "Function 'head' passed too many arguments!");
 
-    LASSERT(a, a->cell[0]->type != LVAL_QEXPR,
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
         "Function 'head' passed incorrect types!");
 
-    LASSERT(a, a->cell[0]->count == 0,
+    LASSERT(a, a->cell[0]->count != 0,
         "Funcrion 'head' passed {}!");
 
     // otherwise take first argument
@@ -228,13 +228,13 @@ lval* builtin_head(lval* a){
 
 lval* builtin_tail(lval* a){
     // check error condition
-    LASSERT(a, a->count != 1,
+    LASSERT(a, a->count == 1,
         "Function 'tail' passed to many arguments!");
 
-    LASSERT(a, a->cell[0]->type != LVAL_QEXPR,
+    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
         "Function 'tail' passed incorret types!");
 
-    LASSERT(a, a->cell[0]->count == 0,
+    LASSERT(a, a->cell[0]->count != 0,
         "Function 'tail' passed {}");
 
     // take first argument
@@ -272,7 +272,6 @@ lval* lval_join(lval* x, lval* y){
     return x;
 }
 
-
 lval* builtin_join(lval* a){
     for (int i = 0; i<a->count; i++){
         LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
@@ -289,6 +288,21 @@ lval* builtin_join(lval* a){
     return x;
 
 }
+
+lval* builtin_op(lval* a, char* op);
+
+
+lval* builtin(lval* a, char* func){
+    if(strcmp("list", func) == 0 ){ return builtin_list(a); }
+    if(strcmp("head", func) == 0 ){ return builtin_head(a); }
+    if(strcmp("tail", func) == 0 ){ return builtin_tail(a); }
+    if(strcmp("join", func) == 0 ){ return builtin_join(a); }
+    if(strcmp("eval", func) == 0 ){ return builtin_eval(a); }
+    if(strstr("+_*/", func)) { return builtin_op(a, func); }
+    lval_del(a);
+    return lval_err("Unknown function!");
+}
+
 
 
 void lval_expr_print(lval* v, char open, char close){
@@ -396,7 +410,7 @@ lval* lval_eval_sexpr(lval* v){
         return lval_err("S-expression does not start with symbol!");
     }
 
-    lval* result = builtin_op(v, f->sym);
+    lval* result = builtin(v, f->sym);
     lval_del(f);
     return result;
 }
