@@ -88,7 +88,6 @@ lval* lval_qexpr(void){
     return v;
 }
 
-
 void lval_del(lval* v){
     switch (v->type){
         // do nothing special for number type
@@ -158,43 +157,6 @@ lval* lval_read(mpc_ast_t* t){
 
 void lval_print(lval* v);
 
-void lval_expr_print(lval* v, char open, char close){
-    putchar(open);
-    for (int i = 0; i < v->count; i++){
-        // print value contained within
-        lval_print(v->cell[i]);
-
-        // don't print trailing space if last element
-        if (i != (v->count-1)){
-            putchar(' ');
-        }
-    }
-    putchar(close);
-}
-
-// print an "lval"
-void lval_print(lval* v){
-    switch (v->type){
-        // in the case the type is a number print it
-        // then "break" out the switch
-        case LVAL_NUM:
-            printf("%li", v->num);
-            break;
-        case LVAL_ERR:
-            printf("ERROR: %s", v->err);
-            break;
-        case LVAL_SYM:
-            printf("%s", v->sym);
-            break;
-        case LVAL_SEXPR:
-            lval_expr_print(v, '(', ')');
-            break;
-        case LVAL_QEXPR:
-            lval_expr_print(v, '{', '}');
-            break;
-    }
-}
-
 void lval_println(lval* v){
     lval_print(v);
     putchar('\n');
@@ -239,6 +201,69 @@ lval* lval_take(lval* v, int i){
 }
 
 
+
+lval* builtin_head(lval* a){
+    // check error conditions
+    if(a->count != 1){
+        lval_del(a);
+        return lval_err("Function 'head' passed too many arguments!");
+    }
+
+    if(a->cell[0]->type != LVAL_QEXPR){
+        lval_del(a);
+        return lval_err("Function 'head' passed incorrect types!");
+    }
+
+    if(a->cell[0]->count == 0){
+        lval_del(a);
+        return lval_err("Funcrion 'head' passed {}!");
+    }
+
+    // otherwise take first argument
+    lval* v = lval_take(a, 0);
+
+    // delete all elements that are not head and return
+    while(v->count > 1) { lval_del(lval_pop(v, 1)); }
+    return v;    
+}
+
+
+void lval_expr_print(lval* v, char open, char close){
+    putchar(open);
+    for (int i = 0; i < v->count; i++){
+        // print value contained within
+        lval_print(v->cell[i]);
+
+        // don't print trailing space if last element
+        if (i != (v->count-1)){
+            putchar(' ');
+        }
+    }
+    putchar(close);
+}
+
+// print an "lval"
+void lval_print(lval* v){
+    switch (v->type){
+        // in the case the type is a number print it
+        // then "break" out the switch
+        case LVAL_NUM:
+            printf("%li", v->num);
+            break;
+        case LVAL_ERR:
+            printf("ERROR: %s", v->err);
+            break;
+        case LVAL_SYM:
+            printf("%s", v->sym);
+            break;
+        case LVAL_SEXPR:
+            lval_expr_print(v, '(', ')');
+            break;
+        case LVAL_QEXPR:
+            lval_expr_print(v, '{', '}');
+            break;
+    }
+}
 lval* builtin_op(lval* a, char* op){
     // ensure all arguments are numbers
     for(int i = 0; i < a->count; i++ ){
@@ -325,13 +350,15 @@ int main(int argc, char** argv){
 
     // define them with the following language
     mpca_lang(MPCA_LANG_DEFAULT,
-        "                                                       \
-        number      :   /-?[0-9]+/;                             \
-        symbol      :   '+' | '-' | '*' | '/';                  \
-        sexpr       :   '(' <expr>* ')';                        \
-        qexpr       :   '{' <expr>* '}';                        \
-        expr        :   <number> | <symbol> | <sexpr> | <qexpr>;          \
-        praxis      :   /^/ <expr>* /$/;                        \
+        "                                                           \
+        number      :   /-?[0-9]+/;                                 \
+        symbol      :   \"list\" | \"head\" | \"tail\"              \
+                        | \"join\" | \"eval\"                       \
+                        | '+' | '-' | '*' | '/';                    \
+        sexpr       :   '(' <expr>* ')';                            \
+        qexpr       :   '{' <expr>* '}';                            \
+        expr        :   <number> | <symbol> | <sexpr> | <qexpr>;    \
+        praxis      :   /^/ <expr>* /$/;                            \
         ",
         Number, Symbol, Sexpr, Qexpr, Expr, Praxis
     );
