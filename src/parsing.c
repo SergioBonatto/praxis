@@ -228,6 +228,31 @@ lval* builtin_head(lval* a){
 }
 
 
+lval* builtin_tail(lval* a){
+    // check error condition
+    if(a->count != 1){
+        lval_del(a);
+        return lval_err("Function 'tail' passed to many arguments!");
+    }
+
+    if(a->cell[0]->type != LVAL_QEXPR){
+        lval_del(a);
+        return lval_err("Function 'tail' passed incorret types!");
+    }
+
+    if(a->cell[0]->count == 0){
+        lval_del(a);
+        return lval_err("Function 'tail' passed {}");
+    }
+
+    // take first argument
+    lval* v = lval_take(a, 0);
+
+    // delete first element and return
+    lval_del(lval_pop(v, 0));
+    return v;
+}
+
 void lval_expr_print(lval* v, char open, char close){
     putchar(open);
     for (int i = 0; i < v->count; i++){
