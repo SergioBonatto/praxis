@@ -418,8 +418,7 @@ lval* lval_join(lval* x, lval* y){
 
 lval* builtin_join(lenv* e, lval* a){
     for (int i = 0; i<a->count; i++){
-        LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
-            "Function 'join' passed incorrect types!")
+        LASSERT_TYPE("join", a, i, LVAL_QEXPR);
     }
 
     lval* x = lval_pop(a, 0);
@@ -473,21 +472,6 @@ void lenv_add_builtins(lenv* e){
     lenv_add_builtin(e, "/", builtin_div);
 }
 
-/*  */
-/*  */
-/* lval* builtin(lval* a, char* func){ */
-/*     if(strcmp("list", func) == 0 ){ return builtin_list(a); } */
-/*     if(strcmp("head", func) == 0 ){ return builtin_head(a); } */
-/*     if(strcmp("tail", func) == 0 ){ return builtin_tail(a); } */
-/*     if(strcmp("join", func) == 0 ){ return builtin_join(a); } */
-/*     if(strcmp("eval", func) == 0 ){ return builtin_eval(a); } */
-//    /* if(strstr("+_*/", func)) { return builtin_op(a, func); } */
-/*     lval_del(a); */
-/*     return lval_err("Unknown function!"); */
-/* } */
-/*  */
-
-
 void lval_expr_print(lval* v, char open, char close){
     putchar(open);
     for (int i = 0; i < v->count; i++){
@@ -530,10 +514,7 @@ void lval_print(lval* v){
 lval* builtin_op(lenv* e, lval* a, char* op){
     // ensure all arguments are numbers
     for(int i = 0; i < a->count; i++ ){
-        if (a->cell[i]->type != LVAL_NUM){
-            lval_del(a);
-            return lval_err("Cannot operate  on non-number");
-        }
+        LASSERT_TYPE(op, a, i, LVAL_NUM);
     }
 
     // pop the first element
