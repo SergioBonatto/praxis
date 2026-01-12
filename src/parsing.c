@@ -31,9 +31,9 @@ typedef struct lval lval;
 typedef struct lenv lenv;
 
 // Create Enumeration of Possible lval Types
-enum {  
-    LVAL_ERR, LVAL_NUM, LVAL_SYM, 
-    LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR 
+enum {
+    LVAL_ERR, LVAL_NUM, LVAL_SYM,
+    LVAL_FUN, LVAL_SEXPR, LVAL_QEXPR
 };
 
 struct lenv{
@@ -73,11 +73,19 @@ lval* lval_fun(lbuiltin func){
 }
 
 // create a new error type val
-lval* lval_err(char* m){
+lval* lval_err(char* fmt, ...){
     lval* v     = malloc(sizeof(lval));
     v->type     = LVAL_ERR;
-    v->err      = malloc(strlen(m) + 1);
-    strcpy(v->err, m);
+
+    va_list va;
+    va_start(va, fmt);
+
+    v->err      = malloc(512);
+
+    vsnprintf(v->err, 511, fmt, va);
+    v->err      = realloc(v->err, strlen(v->err)+1);
+    va_end(va);
+
     return v;
 }
 
@@ -193,7 +201,7 @@ void lenv_del(lenv* e){
 }
 
 lval* lenv_get(lenv* e, lval* k){
-    //  Iterate over all items in environment 
+    //  Iterate over all items in environment
     for(int i = 0; i < e->count; i++){
         // Check if the stored string matches the symbol string
         // If it does, return a copy of the value
@@ -203,7 +211,7 @@ lval* lenv_get(lenv* e, lval* k){
     }
     // if no symbol found return error
     return lval_err("Unbound symbol");
-}     
+}
 
 void lenv_put(lenv* e, lval* k, lval* v){
     // Iterate over all items in environment
@@ -281,7 +289,7 @@ void lval_println(lval* v){
 lval* lval_eval_sexpr(lenv* e, lval* v);
 
 lval* lval_eval(lenv* e, lval* v){
-    if(v->type == LVAL_SEXPR){
+    if(v->type == LVAL_SYM){
         lval* x = lenv_get(e, v);
         lval_del(v);
         return x;
@@ -292,6 +300,17 @@ lval* lval_eval(lenv* e, lval* v){
     return v;
 }
 
+char* ltype_name(int t){
+    switch(t){
+        case LVAL_FUN: return "Function";
+        case LVAL_NUM: return "Number";
+        case LVAL_ERR: return "Error";
+        case LVAL_SYM: return "Symbol";
+        case LVAL_SEXPR: return "S-expression";
+        case LVAL_QEXPR: return "Q-expression";
+        default: return "Unknown";
+    }
+}
 
 lval* lval_pop(lval* v, int i){
     // find the item at "i"
@@ -364,7 +383,7 @@ lval* builtin_tail(lenv* e, lval* a){
     LASSERT_NUM("tail", a, 1);
     LASSERT_TYPE("tail", a, 0, LVAL_QEXPR);
     LASSERT_NOT_EMPTY("tail", a, 0);
-    
+
     // take first argument
     lval* v = lval_take(a, 0);
 
@@ -402,7 +421,7 @@ lval* builtin_join(lenv* e, lval* a){
         LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
             "Function 'join' passed incorrect types!")
     }
-    
+
     lval* x = lval_pop(a, 0);
 
     while (a->count){
@@ -508,45 +527,45 @@ void lval_print(lval* v){
             break;
     }
 }
-/* lval* builtin_op(lval* a, char* op){ */
-/*     // ensure all arguments are numbers */
-/*     for(int i = 0; i < a->count; i++ ){ */
-/*         if (a->cell[i]->type != LVAL_NUM){ */
-/*             lval_del(a); */
-/*             return lval_err("Cannot operate  on non-number"); */
-/*         } */
-/*     } */
-/*  */
-/*     // pop the first element */
-/*     lval* x = lval_pop(a, 0); */
-/*  */
-/*     // if no arguments and sub then perform unary negation */
-/*     if((strcmp(op, "-") == 0) && a->count == 0){ */
-/*         x->num = -x->num; */
-/*     } */
-/*  */
-/*     // while there are still elements remaining */
-/*     while(a->count > 0){ */
-/*         // pop the next element */
-/*         lval* y = lval_pop(a, 0); */
-/*  */
-/*         if(strcmp(op, "+") == 0) { x->num += y->num; } */
-/*         if(strcmp(op, "-") == 0) { x->num -= y->num; } */
-/*         if(strcmp(op, "*") == 0) { x->num *= y->num; } */
-/*         if(strcmp(op, "/") == 0) { */
-/*             if(y->num == 0){ */
-/*                 lval_del(x); */
-/*                 lval_del(y); */
-/*                 x = lval_err("Division by ZERO"); */
-/*                 break; */
-/*             } */
-/*             x->num /= y->num; */
-/*         } */
-/*         lval_del(y); */
-/*     } */
-/*     lval_del(a); */
-/*     return x; */
-/* } */
+lval* builtin_op(lenv* e, lval* a, char* op){
+    // ensure all arguments are numbers
+    for(int i = 0; i < a->count; i++ ){
+        if (a->cell[i]->type != LVAL_NUM){
+            lval_del(a);
+            return lval_err("Cannot operate  on non-number");
+        }
+    }
+
+    // pop the first element
+    lval* x = lval_pop(a, 0);
+
+    // if no arguments and sub then perform unary negation
+    if((strcmp(op, "-") == 0) && a->count == 0){
+        x->num = -x->num;
+    }
+
+    // while there are still elements remaining
+    while(a->count > 0){
+        // pop the next element
+        lval* y = lval_pop(a, 0);
+
+        if(strcmp(op, "+") == 0) { x->num += y->num; }
+        if(strcmp(op, "-") == 0) { x->num -= y->num; }
+        if(strcmp(op, "*") == 0) { x->num *= y->num; }
+        if(strcmp(op, "/") == 0) {
+            if(y->num == 0){
+                lval_del(x);
+                lval_del(y);
+                x = lval_err("Division by ZERO");
+                break;
+            }
+            x->num /= y->num;
+        }
+        lval_del(y);
+    }
+    lval_del(a);
+    return x;
+}
 
 
 
@@ -614,6 +633,9 @@ int main(int argc, char** argv){
     puts("Praxis Version 0.0.0.0.1");
     puts("Press Ctrl+c to Exit\n");
 
+    lenv* e = lenv_new();
+    lenv_add_builtins(e);
+
     while (1) {
 
         char* input = readline("lispy> ");
@@ -621,7 +643,7 @@ int main(int argc, char** argv){
 
         mpc_result_t r;
         if (mpc_parse("<stdin>", input, Praxis, &r)) {
-            lval* x = lval_eval(lval_read(r.output));
+            lval* x = lval_eval(e, lval_read(r.output));
             lval_println(x);
             lval_del(x);
             mpc_ast_delete(r.output);
