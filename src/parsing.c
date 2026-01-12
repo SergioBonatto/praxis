@@ -24,11 +24,6 @@ void add_history(char* unused){}
 #else
 #include <editline/readline.h>
 #endif
-
-#define LASSERT(args, cond, err) \
-    if (!(cond)) { lval_del(args); return lval_err(err);}
-
-
 struct lval;
 struct lenv;
 
@@ -52,7 +47,7 @@ enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
 typedef lval*(*lbuiltin)(lenv*, lval*);
 
-typedef struct lval {
+struct lval {
     int         type;
     long        num;
     char*       err;
@@ -60,7 +55,7 @@ typedef struct lval {
     lbuiltin    fun;
     int         count;
     struct lval** cell;
-} lval;
+};
 
 // create a new number type lval
 lval* lval_num(long x){
@@ -326,38 +321,50 @@ lval* lval_take(lval* v, int i){
 }
 
 
+#define LASSERT(args, cond, fmt, ...)               \
+    if (!(cond)){                                   \
+        lval* err = lval_err(fmt, ##__VA_ARGS__);   \
+        lval_del(args);                             \
+        return err;                                 \
+    }
 
-lval* builtin_head(lval* a){
-    // check error conditions
-    LASSERT(a, a->count == 1,
-        "Function 'head' passed too many arguments!");
+#define LASSERT_TYPE(func, args, index, expect)                                         \
+    LASSERT(args, args->cell[index]->type == expect,                                    \
+        "Function '%s' passed incorrect type for argument %i. Got %s, Expected %s",    \
+        func, index, ltype_name(args->cell[index]->type), ltype_name(expect)             \
+    )
 
-    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
-        "Function 'head' passed incorrect types!");
+#define LASSERT_NUM(func, args, num) \
+  LASSERT(args, args->count == num, \
+    "Function '%s' passed incorrect number of arguments. Got %i, Expected %i.", \
+    func, args->count, num)
 
-    LASSERT(a, a->cell[0]->count != 0,
-        "Funcrion 'head' passed {}!");
 
-    // otherwise take first argument
+#define LASSERT_NOT_EMPTY(func, args, index)                    \
+    LASSERT(args, args->cell[index]->count != 0,                \
+        "Function '%s' passed {} for argument %i.", func, index \
+    )
+
+lval* lval_eval(lenv* e, lval* v);
+
+
+lval* builtin_head(lenv* e, lval* a){
+    LASSERT_NUM("head", a, 1);
+    LASSERT_TYPE("head", a, 0, LVAL_QEXPR);
+    LASSERT_NOT_EMPTY("head", a, 0);
+
     lval* v = lval_take(a, 0);
 
-    // delete all elements that are not head and return
     while(v->count > 1) { lval_del(lval_pop(v, 1)); }
     return v;
 }
 
 
-lval* builtin_tail(lval* a){
-    // check error condition
-    LASSERT(a, a->count == 1,
-        "Function 'tail' passed to many arguments!");
-
-    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
-        "Function 'tail' passed incorret types!");
-
-    LASSERT(a, a->cell[0]->count != 0,
-        "Function 'tail' passed {}");
-
+lval* builtin_tail(lenv* e, lval* a){
+    LASSERT_NUM("tail", a, 1);
+    LASSERT_TYPE("tail", a, 0, LVAL_QEXPR);
+    LASSERT_NOT_EMPTY("tail", a, 0);
+    
     // take first argument
     lval* v = lval_take(a, 0);
 
@@ -366,21 +373,18 @@ lval* builtin_tail(lval* a){
     return v;
 }
 
-lval* builtin_list(lval* a){
+lval* builtin_list(lenv* e, lval* a){
     a->type = LVAL_QEXPR;
     return a;
 }
 
-lval* builtin_eval(lval* a){
-    LASSERT(a, a->count == 1 ,
-        "Function 'eval' passed to many arguments!");
-
-    LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
-        "Function 'eval' passed incorrect types!");
+lval* builtin_eval(lenv* e, lval* a){
+    LASSERT_NUM("eval", a, 1);
+    LASSERT_TYPE("eval", a, 0, LVAL_QEXPR);
 
     lval* x = lval_take(a, 0);
     x->type = LVAL_SEXPR;
-    return lval_eval(x);
+    return lval_eval(e, x);
 }
 
 lval* lval_join(lval* x, lval* y){
@@ -393,7 +397,7 @@ lval* lval_join(lval* x, lval* y){
     return x;
 }
 
-lval* builtin_join(lval* a){
+lval* builtin_join(lenv* e, lval* a){
     for (int i = 0; i<a->count; i++){
         LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
             "Function 'join' passed incorrect types!")
@@ -504,45 +508,45 @@ void lval_print(lval* v){
             break;
     }
 }
-lval* builtin_op(lval* a, char* op){
-    // ensure all arguments are numbers
-    for(int i = 0; i < a->count; i++ ){
-        if (a->cell[i]->type != LVAL_NUM){
-            lval_del(a);
-            return lval_err("Cannot operate  on non-number");
-        }
-    }
-
-    // pop the first element
-    lval* x = lval_pop(a, 0);
-
-    // if no arguments and sub then perform unary negation
-    if((strcmp(op, "-") == 0) && a->count == 0){
-        x->num = -x->num;
-    }
-
-    // while there are still elements remaining
-    while(a->count > 0){
-        // pop the next element
-        lval* y = lval_pop(a, 0);
-
-        if(strcmp(op, "+") == 0) { x->num += y->num; }
-        if(strcmp(op, "-") == 0) { x->num -= y->num; }
-        if(strcmp(op, "*") == 0) { x->num *= y->num; }
-        if(strcmp(op, "/") == 0) {
-            if(y->num == 0){
-                lval_del(x);
-                lval_del(y);
-                x = lval_err("Division by ZERO");
-                break;
-            }
-            x->num /= y->num;
-        }
-        lval_del(y);
-    }
-    lval_del(a);
-    return x;
-}
+/* lval* builtin_op(lval* a, char* op){ */
+/*     // ensure all arguments are numbers */
+/*     for(int i = 0; i < a->count; i++ ){ */
+/*         if (a->cell[i]->type != LVAL_NUM){ */
+/*             lval_del(a); */
+/*             return lval_err("Cannot operate  on non-number"); */
+/*         } */
+/*     } */
+/*  */
+/*     // pop the first element */
+/*     lval* x = lval_pop(a, 0); */
+/*  */
+/*     // if no arguments and sub then perform unary negation */
+/*     if((strcmp(op, "-") == 0) && a->count == 0){ */
+/*         x->num = -x->num; */
+/*     } */
+/*  */
+/*     // while there are still elements remaining */
+/*     while(a->count > 0){ */
+/*         // pop the next element */
+/*         lval* y = lval_pop(a, 0); */
+/*  */
+/*         if(strcmp(op, "+") == 0) { x->num += y->num; } */
+/*         if(strcmp(op, "-") == 0) { x->num -= y->num; } */
+/*         if(strcmp(op, "*") == 0) { x->num *= y->num; } */
+/*         if(strcmp(op, "/") == 0) { */
+/*             if(y->num == 0){ */
+/*                 lval_del(x); */
+/*                 lval_del(y); */
+/*                 x = lval_err("Division by ZERO"); */
+/*                 break; */
+/*             } */
+/*             x->num /= y->num; */
+/*         } */
+/*         lval_del(y); */
+/*     } */
+/*     lval_del(a); */
+/*     return x; */
+/* } */
 
 
 
