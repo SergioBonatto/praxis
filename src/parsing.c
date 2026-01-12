@@ -689,11 +689,6 @@ int main(int argc, char** argv){
         Number, Symbol, Sexpr, Qexpr, Expr, Praxis
     );
 
-        /* symbol      :   \"list\" | \"head\" | \"tail\"              \ */
-        /*                 | \"join\" | \"eval\"                       \ */
-        /*                 | '+' | '-' | '*' | '/';                    \ */
-
-
     // print version and exit information
     puts("Praxis Version 0.0.0.0.1");
     puts("Press Ctrl+c to Exit\n");
