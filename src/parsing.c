@@ -61,6 +61,7 @@ typedef lval*(*lbuiltin)(lenv*, lval*);
 */
 
 struct lenv{
+    lenv*   par;
     int     count;
     char**  syms;
     lval**  vals;
@@ -87,6 +88,7 @@ struct lval {
 |                       CONSTRUCTORS                      |
 +---------------------------------------------------------+
 */
+lenv* lenv_new(void);
 
 // create a new number type lval
 lval* lval_num(long x){
@@ -256,7 +258,7 @@ void lval_del(lval* v){
 
 lenv* lenv_new(void){
     lenv* e     = malloc(sizeof(lenv));
-    /* e->par      = NULL; */
+    e->par      = NULL;
     e->count    = 0;
     e->syms     = NULL;
     e->vals     = NULL;
@@ -274,16 +276,17 @@ void lenv_del(lenv* e){
 }
 
 lval* lenv_get(lenv* e, lval* k){
-    //  Iterate over all items in environment
     for(int i = 0; i < e->count; i++){
-        // Check if the stored string matches the symbol string
-        // If it does, return a copy of the value
         if(strcmp(e->syms[i], k->sym) == 0){
             return lval_copy(e->vals[i]);
         }
     }
-    // if no symbol found return error
-    return lval_err("Unbound symbol");
+
+    if(e->par){
+        return lenv_get(e->par, k);
+    } else {
+        return lval_err("Unbound symbol '%s'", k->sym);
+    }
 }
 
 void lenv_put(lenv* e, lval* k, lval* v){
@@ -308,6 +311,27 @@ void lenv_put(lenv* e, lval* k, lval* v){
     e->vals[e->count - 1] = lval_copy(v);
     e->syms[e->count - 1] = malloc(strlen(k->sym) + 1);
     strcpy(e->syms[e->count - 1], k->sym);
+}
+
+void lenv_def(lenv* e, lval* k, lval* v){
+    while(e->par) { e = e->par; }
+
+    lenv_put(e, k, v);
+}
+
+
+lenv* lenv_copy(lenv* e){
+    lenv* n     = malloc(sizeof(lenv));
+    n->par      = e->par;
+    n->count    = e->count;
+    n->syms     = malloc(sizeof(char*) * n->count);
+    n->vals     = malloc(sizeof(lval*) * n->count);
+    for (int i = 0; i < e->count; i++){
+        n->syms[i] = malloc(strlen(e->syms[i]) + 1);
+        strcpy(n->syms[i], e->syms[i]);
+        n->vals[i] = lval_copy(e->vals[i]);
+    }
+    return n;
 }
 
 /*
@@ -396,6 +420,21 @@ lval* lval_take(lval* v, int i){
     lval* x = lval_pop(v, i);
     lval_del(v);
     return x;
+}
+
+lval* builtin_eval(lenv* e, lval* a);
+lval* lval_call(lenv* e, lval* f, lval* a){
+    if(f->builtin) { return f->builtin(e, a); }
+    
+    for (int i = 0; i < a->count; i++){
+        lenv_put(f->env, f->formals->cell[i], a->cell[i]);
+    }
+
+    lval_del(a);
+    f->env->par = e;
+    
+    return builtin_eval(f->env,
+        lval_add(lval_sexpr(), lval_copy(f->body)));
 }
 
 /*
@@ -696,6 +735,47 @@ lval* builtin_lambda(lenv* e, lval* a){
 
 }
 
+lval* builtin_var(lenv* e, lval*a, char* func){
+    LASSERT_TYPE(func, a, 0, LVAL_QEXPR);
+
+    lval* syms = a->cell[0];
+    for(int i = 0; i < syms->count; i++){
+        LASSERT(a, (syms->cell[i]->type == LVAL_SYM),
+            "Function '%s' cannot define non-symbol. "
+            "Got %s, expected %s.", func,
+            ltype_name(syms->cell[i]->type),
+            ltype_name(LVAL_SYM));
+    }
+    
+    LASSERT(a, (syms->count == a->count-1), 
+            "Function '%s' passed to many arguments for symbols. "
+            "Got %i. Expected %i.", func, syms->count, a->count-1);
+
+    for (int i = 0; i < syms->count; i++){
+        // if "def" define in globally.
+        // if "put" define in locally
+        if(strcmp(func, "def") == 0){
+            lenv_def(e, syms->cell[i], a->cell[i+1]);
+        }
+
+        if(strcmp(func, "=") == 0){
+            lenv_put(e, syms->cell[i], a->cell[i+1]);
+        }
+    }
+
+    lval_del(a);
+    return lval_sexpr();
+}
+
+
+lval* builtin_def(lenv* e, lval* a){
+    return builtin_var(e, a, "def");
+}
+
+lval* builtin_put(lenv* e, lval* a){
+    return builtin_var(e, a , "=");
+}
+
 /*
 +---------------------------------------------------------+
 |                   ENVIROMENT SETUP                      |
@@ -717,6 +797,8 @@ void lenv_add_builtins(lenv* e){
     lenv_add_builtin(e, "eval", builtin_eval);
     lenv_add_builtin(e, "join", builtin_join);
     lenv_add_builtin(e, "\\",   builtin_lambda);
+    lenv_add_builtin(e, "def",  builtin_def);
+    lenv_add_builtin(e, "=",    builtin_put);
 
     lenv_add_builtin(e, "+", builtin_add);
     lenv_add_builtin(e, "-", builtin_sub);
