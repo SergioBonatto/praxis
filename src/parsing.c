@@ -54,6 +54,15 @@ enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
 typedef lval*(*lbuiltin)(lenv*, lval*);
 
+mpc_parser_t* Number;
+mpc_parser_t* Symbol;
+mpc_parser_t* String;
+mpc_parser_t* Comment;
+mpc_parser_t* Sexpr;
+mpc_parser_t* Qexpr;
+mpc_parser_t* Expr;
+mpc_parser_t* Praxis;
+
 /*
 +---------------------------------------------------------+
 |                   STRUCTURE DEFINITIONS                 |
@@ -523,6 +532,7 @@ lval* lval_call(lenv* e, lval* f, lval* a){
     }
 }
 
+
 /*
 +---------------------------------------------------------+
 |                       ASSERTION MACROS                  |
@@ -638,6 +648,61 @@ lval* lval_read_str(mpc_ast_t* t){
     return str;
 }
 
+lval* lval_eval(lenv* e, lval* v);
+
+lval* builtin_load(lenv* e, lval* a){
+    LASSERT_NUM("load", a, 1);
+    LASSERT_TYPE("load", a, 0, LVAL_STR);
+
+    mpc_result_t r;
+
+    if(mpc_parse_contents(a->cell[0]->str, Praxis, &r)){
+        lval* expr = lval_read(r.output);
+        mpc_ast_delete(r.output);
+
+
+        while(expr->count){
+            lval* x = lval_eval(e, lval_pop(expr, 0));
+            if(x->type == LVAL_ERR){ lval_println(x); }
+            lval_del(x);
+        }
+
+        lval_del(expr);
+        lval_del(a);
+        return lval_sexpr();
+    } else {
+        char* err_msg = mpc_err_string(r.error);
+        mpc_err_delete(r.error);
+
+        lval* err = lval_err("Could not load Library %s", err_msg);
+        free(err_msg);
+        lval_del(a);
+        
+        return err;
+    }
+}
+
+lval* builtin_print(lenv* e, lval* a){
+    for (int i = 0; i < a->count; i++){
+        lval_print(a->cell[i]);
+        putchar(' ');
+    }
+
+    putchar('\n');
+    lval_del(a);
+
+    return lval_sexpr();
+}
+
+lval* builtin_error(lenv* e, lval* a){
+    LASSERT_NUM("error", a, 1);
+    LASSERT_TYPE("error", a, 0, LVAL_STR);
+
+    lval* err = lval_err(a->cell[0]->str);
+
+    lval_del(a);
+    return err;
+}
 
 /*
 +---------------------------------------------------------+
@@ -1045,6 +1110,10 @@ void lenv_add_builtins(lenv* e){
     lenv_add_builtin(e, "-", builtin_sub);
     lenv_add_builtin(e, "*", builtin_mul);
     lenv_add_builtin(e, "/", builtin_div);
+
+    lenv_add_builtin(e, "load", builtin_load);
+    lenv_add_builtin(e, "print", builtin_print);
+    lenv_add_builtin(e, "error", builtin_error);
 }
 
 /*
@@ -1056,26 +1125,29 @@ void lenv_add_builtins(lenv* e){
 int main(int argc, char** argv){
 
     // create some Parsers
-    mpc_parser_t* Number    = mpc_new("number");
-    mpc_parser_t* Symbol    = mpc_new("symbol");
-    mpc_parser_t* String    = mpc_new("string");
-    mpc_parser_t* Sexpr     = mpc_new("sexpr");
-    mpc_parser_t* Qexpr     = mpc_new("qexpr");
-    mpc_parser_t* Expr      = mpc_new("expr");
-    mpc_parser_t* Praxis    = mpc_new("praxis");
+    Number    = mpc_new("number");
+    Symbol    = mpc_new("symbol");
+    String    = mpc_new("string");
+    Comment   = mpc_new("comment");
+    Sexpr     = mpc_new("sexpr");
+    Qexpr     = mpc_new("qexpr");
+    Expr      = mpc_new("expr");
+    Praxis    = mpc_new("praxis");
 
     // define them with the following language
     mpca_lang(MPCA_LANG_DEFAULT,
-        "                                                           \
-        number      :   /-?[0-9]+/;                                 \
-        symbol      :   /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/;           \
-        string      :   /\"(\\\\.|[^\"])*\"/ ;                      \
-        sexpr       :   '(' <expr>* ')';                            \
-        qexpr       :   '{' <expr>* '}';                            \
-        expr        :   <number> | <symbol>| <string> | <sexpr> | <qexpr>;    \
-        praxis      :   /^/ <expr>* /$/;                            \
+        "                                                       \
+        number      :   /-?[0-9]+/;                             \
+        symbol      :   /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/;       \
+        string      :   /\"(\\\\.|[^\"])*\"/ ;                  \
+        comment     :   /;[^\\r\\n]*/;                          \
+        sexpr       :   '(' <expr>* ')';                        \
+        qexpr       :   '{' <expr>* '}';                        \
+        expr        :   <number> | <symbol>| <string> |         \
+                        <comment>| <sexpr> | <qexpr>;           \
+        praxis      :   /^/ <expr>* /$/;                        \
         ",
-        Number, Symbol, String, Sexpr, Qexpr, Expr, Praxis
+        Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Praxis
     );
 
     // print version and exit information
@@ -1103,6 +1175,6 @@ int main(int argc, char** argv){
     free(input);
 
     }
-    mpc_cleanup(6, Number, Symbol, Sexpr, Qexpr, Expr, Praxis);
+    mpc_cleanup(6, Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Praxis);
     return 0;
 }
