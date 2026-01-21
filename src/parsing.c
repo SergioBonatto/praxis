@@ -771,7 +771,6 @@ lval* builtin_neq(lenv* e, lval* a){
     return builtin_cmp(e, a, "!=");
 }
 
-
 lval* builtin_op(lenv* e, lval* a, char* op){
     // ensure all arguments are numbers
     for(int i = 0; i < a->count; i++ ){
@@ -822,10 +821,10 @@ lval* builtin_ord(lenv* e, lval*a, char* op){
         r = (a->cell[0]->num < a->cell[1]->num);
     }
    if(strcmp(op, ">=") == 0){
-        r = (a->cell[0]->num > a->cell[1]->num);
+        r = (a->cell[0]->num >= a->cell[1]->num);
     }
    if(strcmp(op, "<=") == 0){
-        r = (a->cell[0]->num > a->cell[1]->num);
+        r = (a->cell[0]->num <= a->cell[1]->num);
     }
    lval_del(a);
    return lval_num(r);
@@ -876,6 +875,27 @@ lval* builtin_cmp(lenv* e, lval* a, char* op){
     lval_del(a);
     return lval_num(r);
 }
+
+lval* builtin_if(lenv* e, lval* a){
+    LASSERT_NUM("if", a, 3);
+    LASSERT_TYPE("if", a, 0, LVAL_NUM);
+    LASSERT_TYPE("if", a, 1, LVAL_QEXPR);
+    LASSERT_TYPE("if", a, 2, LVAL_QEXPR);
+    
+    lval* x;
+    a->cell[1]->type = LVAL_SEXPR;
+    a->cell[2]->type = LVAL_SEXPR;
+    
+    if(a->cell[0]->num){
+        x = lval_eval(e, lval_pop(a, 1));
+    } else {
+        x = lval_eval(e, lval_pop(a, 2));
+    }
+
+    lval_del(a);
+    return x;
+}
+
 
 lval* builtin_lambda(lenv* e, lval* a){
     // check two arguments, each of which are q-expressions
@@ -963,6 +983,14 @@ void lenv_add_builtins(lenv* e){
     lenv_add_builtin(e, "\\",   builtin_lambda);
     lenv_add_builtin(e, "def",  builtin_def);
     lenv_add_builtin(e, "=",    builtin_put);
+
+    lenv_add_builtin(e, "if",   builtin_if);
+    lenv_add_builtin(e, "==",   builtin_eq);
+    lenv_add_builtin(e, "!=",   builtin_neq);
+    lenv_add_builtin(e, ">",    builtin_gt);
+    lenv_add_builtin(e, "<",    builtin_lt);
+    lenv_add_builtin(e, ">=",   builtin_gte);
+    lenv_add_builtin(e, "<=",   builtin_lte);
 
     lenv_add_builtin(e, "+", builtin_add);
     lenv_add_builtin(e, "-", builtin_sub);
