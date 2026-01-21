@@ -913,7 +913,7 @@ int main(int argc, char** argv){
 
     while (1) {
 
-        char* input = readline("lispy> ");
+        char* input = readline("praxis> ");
         add_history(input);
 
         mpc_result_t r;
