@@ -468,15 +468,36 @@ lval* lval_call(lenv* e, lval* f, lval* a){
 
     lval_del(a);
     
-    if (f->formals->count == 0){
-        f->env->par = e;
+    if (
+        f->formals->count > 0 && 
+        strcmp(f->formals->cell[0]->sym, "&") == 0
+        ){
+        
+        if(f->formals->count != 2){
+            return lval_err("Function format invalid. "
+                "Symbol '&' not followed by single symbol");
+        }
 
-        return builtin_eval(
-            f->env, lval_add(lval_sexpr(), lval_copy(f->body)));
+        // pop and delete '&' symbol
+        lval_del(lval_pop(f->formals, 0));
+
+        // pop next symbol and create empty list
+        lval* sym = lval_pop(f->formals, 0);
+        lval* val = lval_qexpr();
+
+        // bint to environment and delete
+        lenv_put(f->env, sym, val);
+        lval_del(sym);
+        lval_del(val);
+    }
+
+    if(f->formals->count == 0){
+        f->env->par = e;
+        return builtin_eval(f->env,
+                lval_add(lval_sexpr(), lval_copy(f->body)));
     } else {
         return lval_copy(f);
     }
-   
 }
 
 /*
