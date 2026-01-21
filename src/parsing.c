@@ -424,6 +424,7 @@ lval* lval_take(lval* v, int i){
 }
 
 lval* builtin_eval(lenv* e, lval* a);
+lval* builtin_list(lenv* e, lval* a);
 
 lval* lval_call(lenv* e, lval* f, lval* a){
     if(f->builtin) { return f->builtin(e, a); }
@@ -442,7 +443,24 @@ lval* lval_call(lenv* e, lval* f, lval* a){
 
         lval* sym = lval_pop(f->formals, 0);
         lval* val = lval_pop(a, 0);
-        
+
+         if (strcmp(sym->sym, "&") == 0){
+            // ensure '&' is followed by another symbol
+            if (f->formals->count != 1){
+                lval_del(a);
+                return lval_err(
+                            "Function format invalid. "
+                            "Symbol '&' not followed by single symbol."
+                        );
+            }       
+
+            lval* nsym = lval_pop(f->formals, 0);
+            lenv_put(f->env, nsym, builtin_list(e, a));
+            lval_del(sym);
+            lval_del(nsym);
+            break;
+         }
+
         lenv_put(f->env, sym, val);
         lval_del(sym);
         lval_del(val);
