@@ -1072,7 +1072,7 @@ int main(int argc, char** argv){
         string      :   /\"(\\\\.|[^\"])*\"/ ;                      \
         sexpr       :   '(' <expr>* ')';                            \
         qexpr       :   '{' <expr>* '}';                            \
-        expr        :   <number> | <symbol> | <sexpr> | <qexpr>;    \
+        expr        :   <number> | <symbol>| <string> | <sexpr> | <qexpr>;    \
         praxis      :   /^/ <expr>* /$/;                            \
         ",
         Number, Symbol, String, Sexpr, Qexpr, Expr, Praxis
