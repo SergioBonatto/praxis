@@ -4,7 +4,7 @@ CPPFLAGS += -I/opt/homebrew/opt/libedit/include
 LDFLAGS  += -L/opt/homebrew/opt/libedit/lib
 LDLIBS   = -ledit
 
-TARGET = parsing
+TARGET = praxis
 SRCS = src/parsing.c src/mpc.c
 
 
