@@ -207,6 +207,7 @@ lval* lval_copy(lval* v){
                 x->formals  = lval_copy(v->formals);
                 x->body     = lval_copy(v->body);
             }
+            break;
         case LVAL_NUM:
             x->num = v->num;
             break;
@@ -484,7 +485,7 @@ lval* lval_call(lenv* e, lval* f, lval* a){
                             "Function format invalid. "
                             "Symbol '&' not followed by single symbol."
                         );
-            }       
+            }
 
             lval* nsym = lval_pop(f->formals, 0);
             lenv_put(f->env, nsym, builtin_list(e, a));
@@ -499,12 +500,12 @@ lval* lval_call(lenv* e, lval* f, lval* a){
     }
 
     lval_del(a);
-    
+
     if (
-        f->formals->count > 0 && 
+        f->formals->count > 0 &&
         strcmp(f->formals->cell[0]->sym, "&") == 0
         ){
-        
+
         if(f->formals->count != 2){
             return lval_err("Function format invalid. "
                 "Symbol '&' not followed by single symbol");
@@ -660,7 +661,6 @@ lval* builtin_load(lenv* e, lval* a){
         lval* expr = lval_read(r.output);
         mpc_ast_delete(r.output);
 
-
         while(expr->count){
             lval* x = lval_eval(e, lval_pop(expr, 0));
             if(x->type == LVAL_ERR){ lval_println(x); }
@@ -677,7 +677,7 @@ lval* builtin_load(lenv* e, lval* a){
         lval* err = lval_err("Could not load Library %s", err_msg);
         free(err_msg);
         lval_del(a);
-        
+
         return err;
     }
 }
@@ -748,7 +748,7 @@ lval* lval_eval_sexpr(lenv* e, lval* v){
     if (f->type != LVAL_FUN){
         lval* err = lval_err(
                 "S-expression starts whith incorrect type. "
-                "Got %s, Expected %s", 
+                "Got %s, Expected %s",
                 ltype_name(f->type),
                 ltype_name(LVAL_FUN)
             );
@@ -922,7 +922,7 @@ lval* builtin_op(lenv* e, lval* a, char* op){
 lval* builtin_ord(lenv* e, lval*a, char* op){
     LASSERT_NUM(op, a, 2);
     LASSERT_TYPE(op, a, 0, LVAL_NUM);
-    LASSERT_TYPE(op, a, 2, LVAL_NUM);
+    LASSERT_TYPE(op, a, 1, LVAL_NUM);
 
     int r;
     if(strcmp(op, ">") == 0){
@@ -945,7 +945,7 @@ int lval_eq(lval* x, lval* y){
     if (x->type != y->type){ return 0; }
 
     switch (x->type){
-        case LVAL_NUM: 
+        case LVAL_NUM:
             return (x->num == y->num);
 
         case LVAL_ERR:
@@ -995,11 +995,11 @@ lval* builtin_if(lenv* e, lval* a){
     LASSERT_TYPE("if", a, 0, LVAL_NUM);
     LASSERT_TYPE("if", a, 1, LVAL_QEXPR);
     LASSERT_TYPE("if", a, 2, LVAL_QEXPR);
-    
+
     lval* x;
     a->cell[1]->type = LVAL_SEXPR;
     a->cell[2]->type = LVAL_SEXPR;
-    
+
     if(a->cell[0]->num){
         x = lval_eval(e, lval_pop(a, 1));
     } else {
@@ -1044,8 +1044,8 @@ lval* builtin_var(lenv* e, lval*a, char* func){
             ltype_name(syms->cell[i]->type),
             ltype_name(LVAL_SYM));
     }
-    
-    LASSERT(a, (syms->count == a->count-1), 
+
+    LASSERT(a, (syms->count == a->count-1),
             "Function '%s' passed to many arguments for symbols. "
             "Got %i. Expected %i.", func, syms->count, a->count-1);
 
