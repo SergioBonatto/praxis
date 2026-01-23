@@ -68,9 +68,15 @@ lenv* lenv_copy(lenv* e);
 /* Evaluation */
 lval* lval_eval(lenv* e, lval* v);
 
+/* Foward declarations for lval operations */
+lval* lval_copy(lval* v);
+void lval_del(lval* v);
+int lval_eq(lval* x, lval* y);
+
 /* Builtins */
 lval* builtin_eval(lenv* e, lval* a);
 lval* builtin_list(lenv* e, lval* a);
+
 
 /* Parsing */
 lval* lval_read_str(mpc_ast_t* t);
@@ -214,89 +220,128 @@ lval* lval_lambda(lval* formals, lval* body){
 |                   MEMORY MANAGEMENT                     |
 +---------------------------------------------------------+
 */
+// COPY OPERATIONS
+static lval* lval_copy_fun(lval* v){
+    lval* x = malloc(sizeof(lval));
+    x->type = LVAL_FUN;
+
+    if(v->builtin){
+        x->builtin = v->builtin;
+    } else {
+        x->builtin  = NULL;
+        x->env      = lenv_copy(v->env);
+        x->formals  = lval_copy(v->formals);
+        x->body     = lval_copy(v->body);
+    }
+    return x;
+}
+
+static lval* lval_copy_str(lval* v, int type){
+    lval* x = malloc(sizeof(lval));
+    x->type = type;
+
+    char* src = NULL;
+    char** dst = NULL;
+
+    switch(type){
+        case LVAL_ERR:
+            src = v->err;
+            dst = &x->err;
+            break;
+        case LVAL_SYM:
+            src = v->sym;
+            dst = &x->sym;
+            break;
+        case LVAL_STR:
+            src = v->str;
+            dst = &x->str;
+            break;
+    }
+
+    *dst = malloc(strlen(src) + 1);
+    strcpy(*dst, src);
+    return x;
+}
+
+static lval* lval_copy_expr(lval* v){
+    lval* x = malloc(sizeof(lval));
+    x->type = v->type;
+    x->count = v->count;
+    x->cell = malloc(sizeof(lval*) * x->count);
+
+    for (int i = 0; i < x->count; i++){
+        x->cell[i] = lval_copy(v->cell[i]);
+    }
+    return x;
+}
 
 lval* lval_copy(lval* v){
     lval* x = malloc(sizeof(lval));
     x->type = v->type;
 
     switch (v->type){
-        // copy functions and numbers directly
         case LVAL_FUN:
-            if(v->builtin){
-                x->builtin = v->builtin;
-            } else {
-                x->builtin  = NULL;
-                x->env      = lenv_copy(v->env);
-                x->formals  = lval_copy(v->formals);
-                x->body     = lval_copy(v->body);
-            }
-            break;
+            free(x);
+            return lval_copy_fun(v);
+
         case LVAL_NUM:
             x->num = v->num;
-            break;
+            return x;
 
-        // copy strings using malloc and strcpy
         case LVAL_ERR:
-            x->err = malloc(strlen(v->err) + 1);
-            strcpy(x->err, v->err);
-            break;
-
         case LVAL_SYM:
-            x->sym  = malloc(strlen(v->sym) + 1);
-            strcpy(x->sym, v->sym);
-            break;
-
         case LVAL_STR:
-            x->str = malloc(strlen(v->str) + 1);
-            strcpy(x->str, v->str);
-            break;
+            free(x);
+            return lval_copy_str(v, v->type);
 
         case LVAL_SEXPR:
         case LVAL_QEXPR:
-            x->count    = v->count;
-            x->cell     = malloc(sizeof(lval*) * x->count);
-            for (int i = 0; i < x->count; i++){
-                x->cell[i] = lval_copy(v->cell[i]);
-            }
-            break;
+            free(x);
+            return lval_copy_expr(v);
     }
     return x;
 }
 
+//  DELETE OPERATIONS
+static void lval_del_fun(lval* v){
+    if(!v->builtin){
+        lenv_del(v->env);
+        lval_del(v->formals);
+        lval_del(v->body);
+    }
+}
+
+static void lval_del_expr(lval* v){
+    for (int i = 0; i < v->count; i++){
+        lval_del(v->cell[i]);
+    }
+    free(v->cell);
+}
+
 void lval_del(lval* v){
     switch (v->type){
-        // do nothing special for number type
         case LVAL_NUM:
             break;
 
-        // for err or sym free the string data
         case LVAL_ERR:
             free(v->err);
             break;
+
         case LVAL_SYM:
             free(v->sym);
             break;
 
         case LVAL_FUN:
-            if(!v->builtin){
-                lenv_del(v->env);
-                lval_del(v->formals);
-                lval_del(v->body);
-            }
+            lval_del_fun(v);
             break;
 
         case LVAL_STR:
             free(v->str);
             break;
 
-        // if Qexpr or Sexpr then delete all elements inside
         case LVAL_QEXPR:
         case LVAL_SEXPR:
-            for (int i = 0; i < v->count; i++){
-                lval_del(v->cell[i]);
-            }
-            // also free the memory alocated to contain pointers
-            free(v->cell);
+            lval_del_expr(v);
             break;
     }
     free(v);
@@ -391,17 +436,21 @@ lenv* lenv_copy(lenv* e){
 +---------------------------------------------------------+
 */
 
+static const char* LTYPE_NAMES[] = {
+    [LVAL_ERR]      = "Error",
+    [LVAL_NUM]      = "Number",
+    [LVAL_SYM]      = "Symbol",
+    [LVAL_STR]      = "String",
+    [LVAL_FUN]      = "Function",
+    [LVAL_SEXPR]    = "S-expression",
+    [LVAL_QEXPR]    = "Q-expression"
+};
+
 char* ltype_name(int t){
-    switch(t){
-        case LVAL_FUN: return "Function";
-        case LVAL_NUM: return "Number";
-        case LVAL_ERR: return "Error";
-        case LVAL_SYM: return "Symbol";
-        case LVAL_STR: return "String";
-        case LVAL_SEXPR: return "S-expression";
-        case LVAL_QEXPR: return "Q-expression";
-        default: return "Unknown";
+    if(t >= 0 && t < 7){
+        return (char*)LTYPE_NAMES[t];
     }
+    return "Unknown";
 }
 
 lval* lval_pop(lval* v, int i){
@@ -447,8 +496,30 @@ lval* lval_join(lval* x, lval* y){
     return x;
 }
 
+static int lval_eq_fun(lval* x, lval* y){
+    if(x->builtin || y->builtin){
+        return x->builtin == y->builtin;
+    }
+    return lval_eq(x->formals, y->formals) && lval_eq(x->body, y->body);
+}
+
+static int lval_eq_expr(lval* x, lval* y){
+    if (x->count != y->count) {
+        return 0;
+    }
+
+    for (int i = 0; i < x->count; i++){
+        if(!lval_eq(x->cell[i], y->cell[i])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int lval_eq(lval* x, lval* y){
-    if (x->type != y->type){ return 0; }
+    if (x->type != y->type){
+        return 0;
+    }
 
     switch (x->type){
         case LVAL_NUM:
@@ -464,21 +535,11 @@ int lval_eq(lval* x, lval* y){
             return (strcmp(x->str, y->str) == 0);
 
         case LVAL_FUN:
-            if(x->builtin || y->builtin){
-                return x->builtin == y->builtin;
-            } else {
-                return lval_eq(x->formals, y->formals)
-                    && lval_eq(x->body, y->body);
-            }
+            return lval_eq_fun(x, y);
 
         case LVAL_QEXPR:
         case LVAL_SEXPR:
-            if (x->count != y->count) { return 0; }
-            for (int i = 0; i < x->count; i++){
-                if(!lval_eq(x->cell[i], y->cell[i])) { return 0; }
-            }
-            return 1;
-        break;
+            return lval_eq_expr(x, y);
     }
     return 0;
 }
@@ -557,6 +618,7 @@ lval* lval_read(mpc_ast_t* t){
         if(strcmp(t->children[i]->contents, "{")    == 0) { continue; }
         if(strcmp(t->children[i]->contents, "}")    == 0) { continue; }
         if (strcmp(t->children[i]->tag,  "regex")   == 0) { continue; }
+        if (strstr(t->children[i]->tag, "comment")) { continue; }
         x = lval_add(x, lval_read(t->children[i]));
     }
     return x;
@@ -598,38 +660,61 @@ void lval_print_str(lval* v){
 }
 
 // print an "lval"
+/* Funções auxiliares para impressão */
+static void lval_print_num(lval* v){
+    printf("%li", v->num);
+}
+
+static void lval_print_err(lval* v){
+    printf("ERROR: %s", v->err);
+}
+
+static void lval_print_fun(lval* v){
+    if(v->builtin){
+        printf("<builtin>");
+    } else {
+        printf("(\\ ");
+        lval_print(v->formals);
+        putchar(' ');
+        lval_print(v->body);
+        putchar(')');
+    }
+}
+
+static void lval_print_sym(lval* v){
+    printf("%s", v->sym);
+}
+
+static void lval_print_sexpr(lval* v){
+    lval_expr_print(v, '(', ')');
+}
+
+static void lval_print_qexpr(lval* v){
+    lval_expr_print(v, '{', '}');
+}
+
 void lval_print(lval* v){
     switch (v->type){
-        // in the case the type is a number print it
-        // then "break" out the switch
         case LVAL_NUM:
-            printf("%li", v->num);
+            lval_print_num(v);
             break;
         case LVAL_ERR:
-            printf("ERROR: %s", v->err);
+            lval_print_err(v);
             break;
         case LVAL_FUN:
-            if(v->builtin){
-                printf("<builtin>");
-            } else {
-                printf("(\\ ");
-                lval_print(v->formals);
-                putchar(' ');
-                lval_print(v->body);
-                putchar(')');
-            }
+            lval_print_fun(v);
             break;
         case LVAL_SYM:
-            printf("%s", v->sym);
+            lval_print_sym(v);
             break;
         case LVAL_STR:
             lval_print_str(v);
             break;
         case LVAL_SEXPR:
-            lval_expr_print(v, '(', ')');
+            lval_print_sexpr(v);
             break;
         case LVAL_QEXPR:
-            lval_expr_print(v, '{', '}');
+            lval_print_qexpr(v);
             break;
     }
 }
@@ -1051,7 +1136,8 @@ lval* builtin_load(lenv* e, lval* a){
         mpc_ast_delete(r.output);
 
         while(expr->count){
-            lval* x = lval_eval(e, lval_pop(expr, 0));
+            lval* to_eval = lval_pop(expr, 0);
+            lval* x = lval_eval(e, to_eval);
             if(x->type == LVAL_ERR){ lval_println(x); }
             lval_del(x);
         }
@@ -1118,6 +1204,7 @@ void lenv_add_builtins(lenv* e){
     lenv_add_builtin(e, "=",    builtin_put);
 
     lenv_add_builtin(e, "if",   builtin_if);
+
     lenv_add_builtin(e, "==",   builtin_eq);
     lenv_add_builtin(e, "!=",   builtin_neq);
     lenv_add_builtin(e, ">",    builtin_gt);
@@ -1169,15 +1256,25 @@ int main(int argc, char** argv){
         Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Praxis
     );
 
-    // print version and exit information
-    puts("Praxis Version 0.0.0.0.1");
-    puts("Press Ctrl+c to Exit\n");
-
     lenv* e = lenv_new();
     lenv_add_builtins(e);
 
-    while (1) {
+    if (argc >= 2) {
+      for (int i = 1; i < argc; i++) {
+        printf("Loading file: %s\n", argv[i]);
+        lval* args = lval_add(lval_sexpr(), lval_str(argv[i]));
 
+        lval* x = builtin_load(e, args);
+
+        if (x->type == LVAL_ERR) { lval_println(x); }
+        lval_del(x);
+      }
+    } else {
+      puts("Praxis Version 0.0.1");
+      puts("Press Ctrl+c to Exit\n");
+    }
+
+    while (1) {
         char* input = readline("praxis> ");
         add_history(input);
 
@@ -1194,6 +1291,6 @@ int main(int argc, char** argv){
     free(input);
 
     }
-    mpc_cleanup(6, Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Praxis);
+    mpc_cleanup(8, Number, Symbol, String, Comment, Sexpr, Qexpr, Expr, Praxis);
     return 0;
 }

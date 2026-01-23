@@ -1,20 +1,24 @@
 CC = clang
-CFLAGS = -std=c99 -Wall
-CPPFLAGS += -I/opt/homebrew/opt/libedit/include
-LDFLAGS  += -L/opt/homebrew/opt/libedit/lib
-LDLIBS   = -ledit
+CFLAGS = -std=c99 -Wall -I/opt/homebrew/opt/libedit/include
+LDFLAGS = -L/opt/homebrew/opt/libedit/lib -ledit
 
 TARGET = praxis
-SRCS = src/parsing.c src/mpc.c
 
+SRCS = src/parsing.c src/mpc.c
+OBJS = $(SRCS:.c=.o)
+
+.PHONY: all run clean
 
 all: $(TARGET)
 
-$(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(SRCS) $(LDFLAGS) $(LDLIBS) -o $@
+$(TARGET): $(OBJS)
+	$(CC) -o $@ $(OBJS) $(LDFLAGS)
 
-run: $(TARGET)
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+run: all
 	./$(TARGET)
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(OBJS)

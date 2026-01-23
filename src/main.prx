@@ -5,7 +5,7 @@
 
 ; Function definitions 
 ( def { fun } (\ { f b } {
-	def (head f) (\ (tail f) b)
+	def { head f } (\ (tail f) b)
 }))
 
 ; Unpack list for Function
@@ -21,10 +21,10 @@
 ( def { uncurry } pack )
 
 ; Perform Several things in sequence
-( fun { do & l } {
-	if (== l nil)
+( fun { do & 1 } {
+	if (== 1 nil)
 		{ nil }
-		{ last l }
+		{ last 1 }
 })
 
 ; Open new scope
