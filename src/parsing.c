@@ -778,78 +778,113 @@ lval* lval_eval_sexpr(lenv* e, lval* v){
     return result;
 }
 
+static lval* validate_call_args(lval* f, lval* a, int given, int total){
+    if (f->formals->count == 0){
+        lval_del(a);
+        return lval_err(
+                "Function passed too many arguments. "
+                "Got %i, Expected %i.", given, total
+                );
+    }
+    return NULL;
+}
+
+static lval* handle_empty_varargs(lval* f){
+    if (
+        f->formals->count > 0 &&
+        strcmp(f->formals->cell[0]->sym, "&") == 0 
+       ) {
+        if (f->formals->count != 2){
+            return lval_err(
+                    "Function format invalid. "
+                    "Symbol '&' not followed by single symbol."
+                    );
+        }
+
+        lval_del(lval_pop(f->formals, 0));
+        
+        lval* sym = lval_pop(f->formals, 0);
+        lval* val = lval_qexpr();
+
+        lenv_put(f->env, sym, val);
+        lval_del(sym);
+        lval_del(val);
+    }
+    return NULL;
+}
+
+static lval* handle_varargs(lenv* e, lval* f, lval* sym, lval* a){
+    if(strcmp(sym->sym, "&") == 0){
+        if(f->formals->count != 1){
+            lval_del(a);
+            return lval_err(
+                    "Function format invalid. "
+                    "Symbol '&' not followed by single symbol."
+                    );
+        }
+        lval* nsym = lval_pop(f->formals, 0);
+        lenv_put(f->env, nsym, builtin_list(e, a));
+        lval_del(sym);
+        lval_del(nsym);
+        return lval_sexpr();
+    }
+    return NULL;
+}
+
+
+static lval* bind_formal_params(lenv* e, lval* f, lval* a, int given, int total){
+    while (a->count){
+        lval* err = validate_call_args(f, a, given, total);
+        if(err) return err;
+
+        lval* sym = lval_pop(f->formals, 0);
+        lval* val = lval_pop(a, 0);
+
+        lval* varargs_result = handle_varargs(e, f, sym, a);
+
+        if(varargs_result){
+            lval_del(val);
+            return varargs_result;
+        }
+
+        lenv_put(f->env, sym, val);
+        lval_del(sym);
+        lval_del(val);
+    }
+    return NULL;
+}
+
+static lval* finalize_call(lenv* e, lval* f){
+    if(f->formals->count == 0){
+        f->env->par = e;
+        return builtin_eval(
+                f->env,
+                lval_add(lval_sexpr(), lval_copy(f->body))
+                );
+    }
+    return lval_copy(f);
+}
+
 lval* lval_call(lenv* e, lval* f, lval* a){
     if(f->builtin) { return f->builtin(e, a); }
 
     int given = a->count;
     int total = f->formals->count;
 
-    while (a->count){
-        if (f->formals->count == 0 ){
-            lval_del(a);
-            return lval_err(
-                "Function passed to many arguments. "
-                "Got %i, Expected %i.", given, total
-                );
-        }
-
-        lval* sym = lval_pop(f->formals, 0);
-        lval* val = lval_pop(a, 0);
-
-         if (strcmp(sym->sym, "&") == 0){
-            // ensure '&' is followed by another symbol
-            if (f->formals->count != 1){
-                lval_del(a);
-                return lval_err(
-                            "Function format invalid. "
-                            "Symbol '&' not followed by single symbol."
-                        );
-            }
-
-            lval* nsym = lval_pop(f->formals, 0);
-            lenv_put(f->env, nsym, builtin_list(e, a));
-            lval_del(sym);
-            lval_del(nsym);
-            break;
-         }
-
-        lenv_put(f->env, sym, val);
-        lval_del(sym);
-        lval_del(val);
+    lval* bind_result = bind_formal_params(e, f, a, given, total);
+    if(bind_result && bind_result->type != LVAL_SEXPR){
+        return bind_result;
     }
 
     lval_del(a);
 
-    if (
-        f->formals->count > 0 &&
-        strcmp(f->formals->cell[0]->sym, "&") == 0
-        ){
-
-        if(f->formals->count != 2){
-            return lval_err("Function format invalid. "
-                "Symbol '&' not followed by single symbol");
-        }
-
-        // pop and delete '&' symbol
-        lval_del(lval_pop(f->formals, 0));
-
-        // pop next symbol and create empty list
-        lval* sym = lval_pop(f->formals, 0);
-        lval* val = lval_qexpr();
-
-        // bint to environment and delete
-        lenv_put(f->env, sym, val);
-        lval_del(sym);
-        lval_del(val);
+    lval* empty_varargs_err = handle_empty_varargs(f);
+    if(empty_varargs_err){
+        return empty_varargs_err;
     }
 
-    if(f->formals->count == 0){
-        f->env->par = e;
-        return builtin_eval(f->env,
-                lval_add(lval_sexpr(), lval_copy(f->body)));
-    } else {
-        return lval_copy(f);
-    }
+    return finalize_call(e, f);
+
 }
 
 /*
