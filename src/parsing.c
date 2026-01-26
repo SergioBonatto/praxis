@@ -53,6 +53,7 @@ enum {
 enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
 typedef lval*(*lbuiltin)(lenv*, lval*);
+typedef int (*cmp_fn)(long, long);
 
 /*
 +---------------------------------------------------------+
@@ -992,26 +993,30 @@ lval* builtin_neq(lenv* e, lval* a){
     return builtin_cmp(e, a, "!=");
 }
 
+static int cmp_gt (long a, long b) { return a > b; }
+static int cmp_lt (long a, long b) { return a < b; }
+static int cmp_gte(long a, long b) { return a >= b; }
+static int cmp_lte(long a, long b) { return a <= b; }
+
+static cmp_fn get_ord_function(char* op){
+    if(strcmp(op, ">")  == 0) return cmp_gt;
+    if(strcmp(op, "<")  == 0) return cmp_lt;
+    if(strcmp(op, ">=") == 0) return cmp_gte;
+    if(strcmp(op, "<=") == 0) return cmp_lte;
+    return NULL;
+}
+
+
 lval* builtin_ord(lenv* e, lval*a, char* op){
     LASSERT_NUM(op, a, 2);
     LASSERT_TYPE(op, a, 0, LVAL_NUM);
     LASSERT_TYPE(op, a, 1, LVAL_NUM);
+    
+    cmp_fn cmp = get_ord_function(op);
+    int r = cmp(a->cell[0]->num, a->cell[1]->num);
 
-    int r;
-    if(strcmp(op, ">") == 0){
-        r = (a->cell[0]->num > a->cell[1]->num);
-    }
-    if(strcmp(op, "<") == 0){
-        r = (a->cell[0]->num < a->cell[1]->num);
-    }
-   if(strcmp(op, ">=") == 0){
-        r = (a->cell[0]->num >= a->cell[1]->num);
-    }
-   if(strcmp(op, "<=") == 0){
-        r = (a->cell[0]->num <= a->cell[1]->num);
-    }
-   lval_del(a);
-   return lval_num(r);
+    lval_del(a);
+    return lval_num(r);
 }
 
 lval* builtin_cmp(lenv* e, lval* a, char* op){
