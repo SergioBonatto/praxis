@@ -60,26 +60,20 @@ typedef lval*(*lbuiltin)(lenv*, lval*);
 +---------------------------------------------------------+
 */
 
-/* Environment */
-lenv* lenv_new(void);
-void lenv_del(lenv* e);
-lenv* lenv_copy(lenv* e);
+lenv*   lenv_new(void);
+void    lenv_del(lenv* e);
+lenv*   lenv_copy(lenv* e);
 
-/* Evaluation */
-lval* lval_eval(lenv* e, lval* v);
+lval*   lval_eval(lenv* e, lval* v);
 
-/* Foward declarations for lval operations */
-lval* lval_copy(lval* v);
-void lval_del(lval* v);
-int lval_eq(lval* x, lval* y);
+lval*   lval_copy(lval* v);
+void    lval_del(lval* v);
+int     lval_eq(lval* x, lval* y);
 
-/* Builtins */
-lval* builtin_eval(lenv* e, lval* a);
-lval* builtin_list(lenv* e, lval* a);
+lval*   builtin_eval(lenv* e, lval* a);
+lval*   builtin_list(lenv* e, lval* a);
 
-
-/* Parsing */
-lval* lval_read_str(mpc_ast_t* t);
+lval*   lval_read_str(mpc_ast_t* t);
 
 /*
 +---------------------------------------------------------+
@@ -132,7 +126,6 @@ struct lval {
 +---------------------------------------------------------+
 */
 
-// create a new number type lval
 lval* lval_num(long x){
     lval* v     = malloc(sizeof(lval));
     v->type     = LVAL_NUM;
@@ -147,7 +140,6 @@ lval* lval_fun(lbuiltin func){
     return v;
 }
 
-// create a new error type val
 lval* lval_err(char* fmt, ...){
     lval* v     = malloc(sizeof(lval));
     v->type     = LVAL_ERR;
@@ -164,7 +156,6 @@ lval* lval_err(char* fmt, ...){
     return v;
 }
 
-// construct a pointer to a new symbol lval
 lval* lval_sym(char* s){
     lval* v = malloc(sizeof(lval));
     v->type = LVAL_SYM;
@@ -181,7 +172,6 @@ lval* lval_str(char* s){
     return v;
 }
 
-// a pointer to a new empty Sexpr lval
 lval* lval_sexpr(void){
     lval* v     = malloc(sizeof(lval));
     v->type     = LVAL_SEXPR;
@@ -190,7 +180,6 @@ lval* lval_sexpr(void){
     return v;
 }
 
-// a ponter to a new empty Qexpr lval
 lval* lval_qexpr(void){
     lval* v     = malloc(sizeof(lval));
     v->type     = LVAL_QEXPR;
@@ -200,18 +189,12 @@ lval* lval_qexpr(void){
 }
 
 lval* lval_lambda(lval* formals, lval* body){
-    lval* v = malloc(sizeof(lval));
-    v->type = LVAL_FUN;
-
-    // set builtin to null
-    v->builtin = NULL;
-
-    // build new enviroment
-    v->env = lenv_new();
-
-    // set formals and body
-    v->formals = formals;
-    v->body = body;
+    lval* v     = malloc(sizeof(lval));
+    v->type     = LVAL_FUN;
+    v->builtin  = NULL;
+    v->env      = lenv_new();
+    v->formals  = formals;
+    v->body     = body;
     return v;
 }
 
@@ -220,7 +203,6 @@ lval* lval_lambda(lval* formals, lval* body){
 |                   MEMORY MANAGEMENT                     |
 +---------------------------------------------------------+
 */
-// COPY OPERATIONS
 static lval* lval_copy_fun(lval* v){
     lval* x = malloc(sizeof(lval));
     x->type = LVAL_FUN;
@@ -302,7 +284,6 @@ lval* lval_copy(lval* v){
     return x;
 }
 
-//  DELETE OPERATIONS
 static void lval_del_fun(lval* v){
     if(!v->builtin){
         lenv_del(v->env);
@@ -387,11 +368,7 @@ lval* lenv_get(lenv* e, lval* k){
 }
 
 void lenv_put(lenv* e, lval* k, lval* v){
-    // Iterate over all items in environment
-    // This is to see if variable already exists
     for (int i = 0; i < e->count; i++){
-        // If variable is found delete item at that position
-        // And replace with variable supplied by user
         if(strcmp(e->syms[i], k->sym) == 0){
             lval_del(e->vals[i]);
             e->vals[i] = lval_copy(v);
@@ -399,12 +376,10 @@ void lenv_put(lenv* e, lval* k, lval* v){
         }
     }
 
-    // If no existing entry found allocate space for new entry
     e->count++;
     e->vals = realloc(e->vals, sizeof(lval*) * e->count);
     e->syms = realloc(e->syms, sizeof(char*) * e->count);
 
-    // copy contents of lval and symbol string into new location
     e->vals[e->count - 1] = lval_copy(v);
     e->syms[e->count - 1] = malloc(strlen(k->sym) + 1);
     strcpy(e->syms[e->count - 1], k->sym);
@@ -412,7 +387,6 @@ void lenv_put(lenv* e, lval* k, lval* v){
 
 void lenv_def(lenv* e, lval* k, lval* v){
     while(e->par) { e = e->par; }
-
     lenv_put(e, k, v);
 }
 
@@ -454,22 +428,14 @@ char* ltype_name(int t){
 }
 
 lval* lval_pop(lval* v, int i){
-    // find the item at "i"
     lval* x = v->cell[i];
-
-    // shift memory after the item at "i" over the top
     memmove(
         &v->cell[i],
         &v->cell[i+1],
         sizeof(lval*) * (v->count-i-1)
     );
-
-    // decrease the count of items in the list
     v->count--;
-
-    //reallocate the memory used
     v->cell = realloc(v->cell, sizeof(lval*) * v->count);
-
     return x;
 }
 
@@ -487,11 +453,9 @@ lval* lval_add(lval* v, lval* x){
 }
 
 lval* lval_join(lval* x, lval* y){
-    // for each cell in 'y' add it to 'x'
     while(y->count){
         x = lval_add(x, lval_pop(y, 0));
     }
-    // delete the empty 'y' and return 'x'
     lval_del(y);
     return x;
 }
@@ -599,19 +563,15 @@ lval* lval_read_str(mpc_ast_t* t){
 }
 
 lval* lval_read(mpc_ast_t* t){
-    // if symbol or number return conversion to that type
     if (strstr(t->tag, "number")) { return lval_read_num(t); }
     if (strstr(t->tag, "symbol")) { return lval_sym(t->contents); }
     if (strstr(t->tag, "string")) { return lval_read_str(t); }
 
-
-    // if root (>) or sexpr then create empty list
     lval* x = NULL;
     if(strcmp(t->tag, ">") == 0){x  = lval_sexpr();}
     if(strstr(t->tag, "sexpr")) {x  = lval_sexpr();}
     if(strstr(t->tag, "qexpr")) {x  = lval_qexpr();}
 
-    // fill this list with any valid expression contained within
     for (int i = 0; i < t->children_num; i++){
         if(strcmp(t->children[i]->contents, "(")    == 0) { continue; }
         if(strcmp(t->children[i]->contents, ")")    == 0) { continue; }
@@ -640,10 +600,8 @@ void lval_println(lval* v){
 void lval_expr_print(lval* v, char open, char close){
     putchar(open);
     for (int i = 0; i < v->count; i++){
-        // print value contained within
         lval_print(v->cell[i]);
 
-        // don't print trailing space if last element
         if (i != (v->count-1)){
             putchar(' ');
         }
@@ -659,8 +617,6 @@ void lval_print_str(lval* v){
     free(escaped);
 }
 
-// print an "lval"
-/* Funções auxiliares para impressão */
 static void lval_print_num(lval* v){
     printf("%li", v->num);
 }
@@ -831,7 +787,6 @@ static lval* handle_varargs(lenv* e, lval* f, lval* sym, lval* a){
     return NULL;
 }
 
-
 static lval* bind_formal_params(lenv* e, lval* f, lval* a, int given, int total){
     while (a->count){
         lval* err = validate_call_args(f, a, given, total);
@@ -884,7 +839,6 @@ lval* lval_call(lenv* e, lval* f, lval* a){
     }
 
     return finalize_call(e, f);
-
 }
 
 /*
@@ -893,7 +847,6 @@ lval* lval_call(lenv* e, lval* f, lval* a){
 +---------------------------------------------------------+
 */
 
-/* List Operations */
 
 lval* builtin_head(lenv* e, lval* a){
     LASSERT_NUM("head", a, 1);
@@ -949,7 +902,6 @@ lval* builtin_join(lenv* e, lval* a){
 
 }
 
-/* Arithmetic Operations */
 
 lval* builtin_op(lenv* e, lval* a, char* op);
 
@@ -968,6 +920,15 @@ lval* builtin_mul(lenv* e, lval* a){
 lval* builtin_div(lenv* e, lval* a){
     return builtin_op(e, a, "/");
 }
+
+static long apply_op(long x, long y, char* op){
+    if(strcmp(op, "+") == 0) return x + y;
+    if(strcmp(op, "-") == 0) return x - y;
+    if(strcmp(op, "*") == 0) return x * y;
+    if(strcmp(op, "/") == 0) return x / y;
+    return 0;
+}
+
 
 lval* builtin_op(lenv* e, lval* a, char* op){
     // ensure all arguments are numbers
@@ -988,18 +949,14 @@ lval* builtin_op(lenv* e, lval* a, char* op){
         // pop the next element
         lval* y = lval_pop(a, 0);
 
-        if(strcmp(op, "+") == 0) { x->num += y->num; }
-        if(strcmp(op, "-") == 0) { x->num -= y->num; }
-        if(strcmp(op, "*") == 0) { x->num *= y->num; }
-        if(strcmp(op, "/") == 0) {
-            if(y->num == 0){
+        if(strcmp(op, "/") == 0 && y->num == 0) {
                 lval_del(x);
                 lval_del(y);
-                x = lval_err("Division by ZERO");
-                break;
-            }
-            x->num /= y->num;
+                lval_del(a);
+                return lval_err("Division by ZERO");
         }
+
+        x->num = apply_op(x->num, y->num, op);
         lval_del(y);
     }
     lval_del(a);
