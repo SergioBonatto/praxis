@@ -560,7 +560,6 @@ lval* lval_read_str(mpc_ast_t* t){
         return lval_err("Memory allocation failed");
     }
     strcpy(unescaped, t->contents+1);
-    char* original_ptr = unescaped;
     unescaped = mpcf_unescape(unescaped);
     lval* str = lval_str(unescaped);
     free(unescaped);
