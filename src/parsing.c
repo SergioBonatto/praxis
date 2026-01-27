@@ -556,6 +556,9 @@ lval* lval_read_num(mpc_ast_t* t){
 lval* lval_read_str(mpc_ast_t* t){
     t->contents[strlen(t->contents) - 1] = '\0';
     char* unescaped = malloc(strlen(t->contents+1)+1);
+    if(!unescaped) {
+        return lval_err("Memory allocation failed");
+    }
     strcpy(unescaped, t->contents+1);
     unescaped = mpcf_unescape(unescaped);
     lval* str = lval_str(unescaped);
@@ -749,7 +752,7 @@ static lval* validate_call_args(lval* f, lval* a, int given, int total){
 static lval* handle_empty_varargs(lval* f){
     if (
         f->formals->count > 0 &&
-        strcmp(f->formals->cell[0]->sym, "&") == 0 
+        strcmp(f->formals->cell[0]->sym, "&") == 0
        ) {
         if (f->formals->count != 2){
             return lval_err(
@@ -759,7 +762,7 @@ static lval* handle_empty_varargs(lval* f){
         }
 
         lval_del(lval_pop(f->formals, 0));
-        
+
         lval* sym = lval_pop(f->formals, 0);
         lval* val = lval_qexpr();
 
@@ -1011,7 +1014,7 @@ lval* builtin_ord(lenv* e, lval*a, char* op){
     LASSERT_NUM(op, a, 2);
     LASSERT_TYPE(op, a, 0, LVAL_NUM);
     LASSERT_TYPE(op, a, 1, LVAL_NUM);
-    
+
     cmp_fn cmp = get_ord_function(op);
     int r = cmp(a->cell[0]->num, a->cell[1]->num);
 
