@@ -52,8 +52,66 @@ enum {
 // Create Enumeration of Possible Error Types
 enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
-typedef lval*(*lbuiltin)(lenv*, lval*);
-typedef int (*cmp_fn)(long, long);
+typedef lval*   (*lbuiltin)     (lenv*, lval*);
+typedef int     (*cmp_fn)       (long, long);
+typedef lval*   (*lval_copy_fn) (lval*);
+typedef void    (*lval_del_fn)  (lval*);
+typedef void    (*lval_print_fn)(lval*);
+
+static lval* lval_copy_num(lval* v);
+static lval* lval_copy_err(lval* v);
+static lval* lval_copy_sym(lval* v);
+static lval* lval_copy_str(lval* v);
+static lval* lval_copy_fun(lval* v);
+static lval* lval_copy_sexpr(lval* v);
+static lval* lval_copy_qexpr(lval* v);
+
+static void lval_del_num(lval* v);
+static void lval_del_err(lval* v);
+static void lval_del_sym(lval* v);
+static void lval_del_str(lval* v);
+static void lval_del_fun(lval* v);
+static void lval_del_sexpr(lval* v);
+static void lval_del_qexpr(lval* v);
+
+static void lval_print_num(lval* v);
+static void lval_print_err(lval* v);
+static void lval_print_sym(lval* v);
+static void lval_print_str(lval* v);
+static void lval_print_fun(lval* v);
+static void lval_print_sexpr(lval* v);
+static void lval_print_qexpr(lval* v);
+
+static const lval_copy_fn LVAL_COPY_TABLE[] = {
+    [LVAL_ERR]      = lval_copy_err,
+    [LVAL_NUM]      = lval_copy_num,
+    [LVAL_SYM]      = lval_copy_sym,
+    [LVAL_STR]      = lval_copy_str,
+    [LVAL_FUN]      = lval_copy_fun,
+    [LVAL_SEXPR]    = lval_copy_sexpr,
+    [LVAL_QEXPR]    = lval_copy_qexpr,
+};
+
+static const lval_del_fn LVAL_DEL_TABLE[] = {
+    [LVAL_ERR]      = lval_del_err,
+    [LVAL_NUM]      = lval_del_num,
+    [LVAL_SYM]      = lval_del_sym,
+    [LVAL_STR]      = lval_del_str,
+    [LVAL_FUN]      = lval_del_fun,
+    [LVAL_SEXPR]    = lval_del_sexpr,
+    [LVAL_QEXPR]    = lval_del_qexpr
+};
+
+static const lval_print_fn LVAL_PRINT_TABLE[] = {
+    [LVAL_ERR]      = lval_print_err,
+    [LVAL_NUM]      = lval_print_num,
+    [LVAL_SYM]      = lval_print_sym,
+    [LVAL_STR]      = lval_print_str,
+    [LVAL_FUN]      = lval_print_fun,
+    [LVAL_SEXPR]    = lval_print_sexpr,
+    [LVAL_QEXPR]    = lval_print_qexpr
+};
+
 
 /*
 +---------------------------------------------------------+
@@ -202,8 +260,39 @@ lval* lval_lambda(lval* formals, lval* body){
 /*
 +---------------------------------------------------------+
 |                   MEMORY MANAGEMENT                     |
-+---------------------------------------------------------+
++-----------------------------------------------------static----+
 */
+static lval* lval_copy_num(lval* v){
+    lval* x = malloc(sizeof(lval));
+    x->type = LVAL_NUM;
+    x->num  = v->num;
+    return x;
+}
+
+static lval* lval_copy_err(lval* v){
+    lval* x = malloc(sizeof(lval));
+    x->type = LVAL_ERR;
+    x->err  = malloc(strlen(v->err) + 1);
+    strcpy(x->err, v->err);
+    return x;
+}
+
+static lval* lval_copy_sym(lval* v){
+    lval* x = malloc(sizeof(lval));
+    x->type = LVAL_SYM;
+    x->sym  = malloc(strlen(v->sym) + 1);
+    strcpy(x->sym, v->sym);
+    return x;
+}
+
+static lval* lval_copy_str(lval* v){
+    lval* x = malloc(sizeof(lval));
+    x->type = LVAL_STR;
+    x->str  = malloc(strlen(v->str) + 1);
+    strcpy(x->str, v->str);
+    return x;
+}
+
 static lval* lval_copy_fun(lval* v){
     lval* x = malloc(sizeof(lval));
     x->type = LVAL_FUN;
@@ -219,36 +308,21 @@ static lval* lval_copy_fun(lval* v){
     return x;
 }
 
-static lval* lval_copy_str(lval* v, int type){
+static lval* lval_copy_sexpr(lval* v){
     lval* x = malloc(sizeof(lval));
-    x->type = type;
+    x->type = LVAL_SEXPR;
+    x->count = v->count;
+    x->cell = malloc(sizeof(lval*) * x->count);
 
-    char* src = NULL;
-    char** dst = NULL;
-
-    switch(type){
-        case LVAL_ERR:
-            src = v->err;
-            dst = &x->err;
-            break;
-        case LVAL_SYM:
-            src = v->sym;
-            dst = &x->sym;
-            break;
-        case LVAL_STR:
-            src = v->str;
-            dst = &x->str;
-            break;
+    for (int i = 0; i < x->count; i++){
+        x->cell[i] = lval_copy(v->cell[i]);
     }
-
-    *dst = malloc(strlen(src) + 1);
-    strcpy(*dst, src);
     return x;
 }
 
-static lval* lval_copy_expr(lval* v){
+static lval* lval_copy_qexpr(lval* v){
     lval* x = malloc(sizeof(lval));
-    x->type = v->type;
+    x->type = LVAL_QEXPR;
     x->count = v->count;
     x->cell = malloc(sizeof(lval*) * x->count);
 
@@ -259,30 +333,23 @@ static lval* lval_copy_expr(lval* v){
 }
 
 lval* lval_copy(lval* v){
-    lval* x = malloc(sizeof(lval));
-    x->type = v->type;
+    return LVAL_COPY_TABLE[v->type](v);
+}
 
-    switch (v->type){
-        case LVAL_FUN:
-            free(x);
-            return lval_copy_fun(v);
+static void lval_del_num(lval* v){
+    // No dynamic memory to free for numbers
+}
 
-        case LVAL_NUM:
-            x->num = v->num;
-            return x;
+static void lval_del_err(lval* v){
+    free(v->err);
+}
 
-        case LVAL_ERR:
-        case LVAL_SYM:
-        case LVAL_STR:
-            free(x);
-            return lval_copy_str(v, v->type);
+static void lval_del_sym(lval* v){
+    free(v->sym);
+}
 
-        case LVAL_SEXPR:
-        case LVAL_QEXPR:
-            free(x);
-            return lval_copy_expr(v);
-    }
-    return x;
+static void  lval_del_str(lval* v){
+    free(v->str);
 }
 
 static void lval_del_fun(lval* v){
@@ -293,7 +360,14 @@ static void lval_del_fun(lval* v){
     }
 }
 
-static void lval_del_expr(lval* v){
+static void lval_del_sexpr(lval* v){
+    for (int i = 0; i < v->count; i++){
+        lval_del(v->cell[i]);
+    }
+    free(v->cell);
+}
+
+static void lval_del_qexpr(lval* v){
     for (int i = 0; i < v->count; i++){
         lval_del(v->cell[i]);
     }
@@ -301,31 +375,7 @@ static void lval_del_expr(lval* v){
 }
 
 void lval_del(lval* v){
-    switch (v->type){
-        case LVAL_NUM:
-            break;
-
-        case LVAL_ERR:
-            free(v->err);
-            break;
-
-        case LVAL_SYM:
-            free(v->sym);
-            break;
-
-        case LVAL_FUN:
-            lval_del_fun(v);
-            break;
-
-        case LVAL_STR:
-            free(v->str);
-            break;
-
-        case LVAL_QEXPR:
-        case LVAL_SEXPR:
-            lval_del_expr(v);
-            break;
-    }
+    LVAL_DEL_TABLE[v->type](v);
     free(v);
 }
 
@@ -613,7 +663,7 @@ void lval_expr_print(lval* v, char open, char close){
     putchar(close);
 }
 
-void lval_print_str(lval* v){
+static void lval_print_str(lval* v){
     char* escaped = malloc(strlen(v->str) + 1);
     strcpy(escaped, v->str);
     escaped = mpcf_escape(escaped);
@@ -654,29 +704,7 @@ static void lval_print_qexpr(lval* v){
 }
 
 void lval_print(lval* v){
-    switch (v->type){
-        case LVAL_NUM:
-            lval_print_num(v);
-            break;
-        case LVAL_ERR:
-            lval_print_err(v);
-            break;
-        case LVAL_FUN:
-            lval_print_fun(v);
-            break;
-        case LVAL_SYM:
-            lval_print_sym(v);
-            break;
-        case LVAL_STR:
-            lval_print_str(v);
-            break;
-        case LVAL_SEXPR:
-            lval_print_sexpr(v);
-            break;
-        case LVAL_QEXPR:
-            lval_print_qexpr(v);
-            break;
-    }
+    LVAL_PRINT_TABLE[v->type](v);
 }
 
 /*
